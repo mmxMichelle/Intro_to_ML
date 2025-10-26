@@ -210,49 +210,49 @@ def cross_validate_decision_tree(X, y, DecisionTree,
     C_total = np.zeros((len(labels_sorted), len(labels_sorted)), dtype=int)
     acc_per_fold = []
 
-    # 【新增】为了直接复用你已有的 precision/recall/f1 接口，这里汇总所有折的 y_true/y_pred
-    y_true_all = []   # 【新增】
-    y_pred_all = []   # 【新增】
+    # to directly reuse your existing precision/recall/f1 interface, here is a summary of all folded y_true/y_pred
+    y_true_all = []   
+    y_pred_all = []   
 
     for train_idx, test_idx in folds:
         X_tr_raw, y_tr = X[train_idx], y[train_idx]
         X_te_raw, y_te = X[test_idx], y[test_idx]
 
-        # —— 每折内部标准化（只用训练折统计量）【新增】
+        #  normalization per fold (only training fold statistics)
         mean = X_tr_raw.mean(axis=0)
         std  = X_tr_raw.std(axis=0)
         std[std == 0] = 1.0
         X_tr = (X_tr_raw - mean) / std
         X_te = (X_te_raw - mean) / std
 
-        # —— 训练与预测（沿用你的 DecisionTree(train_x, train_y, test_x) 接口）
+        #Training and prediction (follow your DecisionTree(train_x, train_y, test_x) interface
         clf = DecisionTree(X_tr, y_tr, X_te)
         nodes = clf.fit(max_depth=max_depth, threshold=threshold)
         y_pred = clf.predict(nodes)
 
-        # —— 累计混淆矩阵（固定标签顺序）【新增】
+        # Cumulative confusion matrix (fixed label order)
         C_fold = confusion_matrix(y_te, y_pred, class_labels=labels_sorted)
         C_total += C_fold
 
-        # —— 也把该折真值与预测收集起来，便于统一用你已有 precision/recall/f1 函数计算【新增】
         y_true_all.append(y_te)
         y_pred_all.append(y_pred)
 
         acc_per_fold.append(accuracy_from_confusion(C_fold))
 
-    # —— 将全部折的标签拼接为一列，再统一计算指标（与累计 CM 的 micro 口径一致）【新增】
-    y_true_all = np.concatenate(y_true_all)   # 【新增】
-    y_pred_all = np.concatenate(y_pred_all)   # 【新增】
+    # Splice all the folded labels into one column, and then calculate the indicators uniformly 
+    # (consistent with the micro caliber of cumulative CM)
+    y_true_all = np.concatenate(y_true_all)  
+    y_pred_all = np.concatenate(y_pred_all)   
 
     acc_total = accuracy_from_confusion(C_total)
-    p_vec, macro_p = precision(y_true_all, y_pred_all)     # 【新增】
-    r_vec, macro_r = recall(y_true_all, y_pred_all)        # 【新增】
-    f_vec, macro_f = f1_score(y_true_all, y_pred_all)      # 【新增】
+    p_vec, macro_p = precision(y_true_all, y_pred_all)    
+    r_vec, macro_r = recall(y_true_all, y_pred_all)       
+    f_vec, macro_f = f1_score(y_true_all, y_pred_all)      
 
     results = {
         "labels": labels_sorted,
-        "confusion_matrix": C_total,                 # 单一 4×4（行=真类，列=预测）
-        "accuracy_from_cm": float(acc_total),        # 来自聚合矩阵的 micro Acc
+        "confusion_matrix": C_total,                 # 4×4 (rows=true classes, columns=predictions)
+        "accuracy_from_cm": float(acc_total),        
         "accuracy_mean_over_folds": float(np.mean(acc_per_fold)),
         "accuracy_std_over_folds": float(np.std(acc_per_fold, ddof=1)) if len(acc_per_fold) > 1 else 0.0,
         "precision_per_class": p_vec,
