@@ -2,6 +2,7 @@ import numpy as np
 from numpy.random import default_rng
 from src.visualization import plot_decision_tree
 from src.decision_tree import DecisionTree
+from .pruning import prune_tree
 
 
 # -------Evaluation Matrix----------------
@@ -268,6 +269,106 @@ def cross_validate_decision_tree(X, y, DecisionTree, filename,
     results = {
         "labels": labels_sorted,
         "confusion_matrix": C_total,  # 4×4 (rows=true classes, columns=predictions)
+        "accuracy_from_cm": float(acc_total),
+        "accuracy_mean_over_folds": float(np.mean(acc_per_fold)),
+        "accuracy_std_over_folds": float(np.std(acc_per_fold, ddof=1)) if len(acc_per_fold) > 1 else 0.0,
+        "precision_per_class": p_vec,
+        "recall_per_class": r_vec,
+        "f1_per_class": f_vec,
+        "macro_precision": float(macro_p),
+        "macro_recall": float(macro_r),
+        "macro_f1": float(macro_f)
+    }
+    return results
+
+
+def cross_validate_pruned_tree(X, y, DecisionTree, filename,
+                                n_splits=10, seed=27,
+                                max_depth=20, threshold=1e-3, show_trees=False):
+    """10-fold CV with internal validation set used for reduced-error pruning.
+
+    This function mirrors `cross_validate_decision_tree` but, for each outer
+    fold, splits the training portion again into a smaller training set and a
+    validation set (90/10). The tree is trained on the inner training set,
+    pruned using the inner validation set, and final predictions on the test
+    fold are made with the pruned tree.
+    """
+    rng = default_rng(seed)
+    folds = train_test_k_fold(n_splits, len(y), rng)
+    labels_sorted = np.unique(y)
+
+    C_total = np.zeros((len(labels_sorted), len(labels_sorted)), dtype=int)
+    acc_per_fold = []
+
+    y_true_all = []
+    y_pred_all = []
+
+    current_fold = 0
+    for train_idx, test_idx in folds:
+        # outer train/test split
+        X_train_val_raw, y_train_val = X[train_idx], y[train_idx]
+        X_te_raw, y_te = X[test_idx], y[test_idx]
+
+        # create inner train/validation split (90/10)
+        rng_inner = default_rng(seed + current_fold)
+        shuffled_indices = rng_inner.permutation(len(X_train_val_raw))
+        split_point = int(0.9 * len(X_train_val_raw))
+        if split_point < 1:
+            # fallback: if too small, assign at least one sample
+            split_point = max(1, len(X_train_val_raw) - 1)
+
+        train_inner_idx = shuffled_indices[:split_point]
+        val_idx = shuffled_indices[split_point:]
+
+        X_tr_raw, y_tr = X_train_val_raw[train_inner_idx], y_train_val[train_inner_idx]
+        X_val_raw, y_val = X_train_val_raw[val_idx], y_train_val[val_idx]
+
+        # normalization: compute mean/std from inner training set only
+        mean = X_tr_raw.mean(axis=0)
+        std = X_tr_raw.std(axis=0)
+        std[std == 0] = 1.0
+        X_tr = (X_tr_raw - mean) / std
+        X_val = (X_val_raw - mean) / std
+        X_te = (X_te_raw - mean) / std
+
+        # Train on inner training set
+        clf = DecisionTree(X_tr, y_tr, X_te)
+        nodes_unpruned = clf.fit(max_depth=max_depth, threshold=threshold)
+
+        # Prune using inner validation set
+        nodes_pruned = prune_tree(nodes_unpruned, DecisionTree, X_tr, y_tr, X_val, y_val)
+
+        # Plot (pruned) tree
+        plot_decision_tree(
+            nodes_pruned,
+            save_name_prefix=f"my_tree_on_{filename}_fold_{current_fold}_pruned",
+            show_fig=False
+        )
+
+        # Predict on test set using the pruned tree
+        y_pred = clf.predict(nodes_pruned)
+
+        C_fold = confusion_matrix(y_te, y_pred, class_labels=labels_sorted)
+        C_total += C_fold
+
+        y_true_all.append(y_te)
+        y_pred_all.append(y_pred)
+
+        acc_per_fold.append(accuracy_from_confusion(C_fold))
+
+        current_fold += 1
+
+    y_true_all = np.concatenate(y_true_all)
+    y_pred_all = np.concatenate(y_pred_all)
+
+    acc_total = accuracy_from_confusion(C_total)
+    p_vec, macro_p = precision(y_true_all, y_pred_all)
+    r_vec, macro_r = recall(y_true_all, y_pred_all)
+    f_vec, macro_f = f1_score(y_true_all, y_pred_all)
+
+    results = {
+        "labels": labels_sorted,
+        "confusion_matrix": C_total,
         "accuracy_from_cm": float(acc_total),
         "accuracy_mean_over_folds": float(np.mean(acc_per_fold)),
         "accuracy_std_over_folds": float(np.std(acc_per_fold, ddof=1)) if len(acc_per_fold) > 1 else 0.0,

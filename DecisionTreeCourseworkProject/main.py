@@ -1,6 +1,6 @@
 import numpy as np
 from src.decision_tree import DecisionTree
-from src.evaluation import cross_validate_decision_tree
+from src.evaluation import cross_validate_decision_tree, cross_validate_pruned_tree
 # from src.pruning import prune_tree
 import argparse
 
@@ -59,14 +59,9 @@ def main():
 
     # After pruning (if enabled)
     if args.prune:
-        '''
-        TODO: insert pruning execution code
-        '''
-        print()
-        print()
         print("\n=== After pruning ===")
-        res_after = cross_validate_decision_tree(
-            X, y, DecisionTree,
+        res_after = cross_validate_pruned_tree(
+            X, y, DecisionTree, filename=filename, show_trees=args.show,
             n_splits=args.folds, seed=args.seed,
             max_depth=args.max_depth, threshold=args.threshold
         )
