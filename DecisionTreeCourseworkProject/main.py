@@ -78,10 +78,15 @@ def main():
         print()
 
         # Save results
-        np.save("results/confusion_matrix_after.npy", res_after["confusion_matrix"])
+        filename = args.dataset
+        filename = filename[5:-4]
+        np.save(f"results/confusion_matrix_on_{filename}_after.npy", res_after["confusion_matrix"])
 
     # Save results
-    np.save("results/confusion_matrix_before.npy", res_before["confusion_matrix"])
+    filename = args.dataset
+    filename = filename[5:-4]
+    np.save(f"results/confusion_matrix_on_{filename}_before.npy", res_before["confusion_matrix"])
 
 if __name__ == "__main__":
     main()
+
