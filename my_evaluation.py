@@ -2,7 +2,9 @@ import numpy as np
 from numpy.random import default_rng
 from decision_tree import DecisionTree
 
-#-------Evaluation Matrix----------------
+#=======================Evaluation Matrix====================================
+
+
 def confusion_matrix(y_gold, y_prediction, class_labels=None):
     """ Compute the confusion matrix.
 
@@ -139,19 +141,64 @@ def f1_score(y_gold, y_prediction):
 
     return (f, macro_f)
 
-#------------Cross Validation-------------
 
-# -------Splitting utilities (outer K-fold + inner hold-out val)------
 
-def k_fold_test_indices(n_splits, n_instances, rng=None):
-    """Return list of length n_splits; each item is test indices for an outer fold."""
-    # [ADD] safer RNG creation
-    if rng is None:
-        rng = default_rng()
-    shuffled = rng.permutation(n_instances)
-    return np.array_split(shuffled, n_splits)
+#====================== K-fold Splitting======================
 
-def split_indices_stratified(idx_all, y_full, val_ratio=0.1, rng=None):
+def k_fold_split(n_splits, n_instances, random_generator=default_rng()):
+    """ Split n_instances into n mutually exclusive splits at random.
+    
+    Args:
+        n_splits (int): Number of splits
+        n_instances (int): Number of instances to split
+        random_generator (np.random.Generator): A random generator
+
+    Returns:
+        list: a list (length n_splits). Each element in the list should contain a 
+            numpy array giving the indices of the instances in that split.
+    """
+
+    # generate a random permutation of indices from 0 to n_instances
+    shuffled_indices = random_generator.permutation(n_instances)
+
+    # split shuffled indices into almost equal sized splits
+    split_indices = np.array_split(shuffled_indices, n_splits)
+
+    return split_indices
+
+
+def train_test_k_fold(n_folds, n_instances, random_generator=default_rng()):
+    """ Generate train and test indices at each fold.
+    
+    Args:
+        n_folds (int): Number of folds
+        n_instances (int): Total number of instances
+        random_generator (np.random.Generator): A random generator
+
+    Returns:
+        list: a list of length n_folds. Each element in the list is a list (or tuple) 
+            with two elements: a numpy array containing the train indices, and another 
+            numpy array containing the test indices.
+    """
+
+    # split the dataset into k splits
+    split_indices = k_fold_split(n_folds, n_instances, random_generator)
+
+    folds = []
+    for k in range(n_folds):
+        # pick k as test
+        test_indices = split_indices[k]
+
+        # combine remaining splits as train
+        # this solution is fancy and worked for me
+        # feel free to use a more verbose solution that's more readable
+        train_indices = np.hstack(split_indices[:k] + split_indices[k+1:])
+
+        folds.append([train_indices, test_indices])
+
+    return folds
+
+def split_for_nested(idx_all, y_full, val_ratio=0.1, rng=None):
     """
     Given a pool of indices `idx_all` (e.g., one outer fold's training set),
     split it into train' and val in a stratified way according to y_full.
@@ -180,23 +227,9 @@ def split_indices_stratified(idx_all, y_full, val_ratio=0.1, rng=None):
         train_idx, val_idx = val_idx[1:], val_idx[:1]
     return train_idx, val_idx
 
-# ---------Hyper-parameter grid----------
-
-def hyperparam_grid():
-    # minimal grid; adjust if needed
-    depths = [6, 10, 14, 20]
-    ths    = [1e-4, 5e-4, 1e-3]
-    for d in depths:
-        for t in ths:
-            yield d, t
-
-
 
 #====================== Step 3 Core (10-fold CV) ======================
-def cross_validate_decision_tree_with_val(
-    X, y, DecisionTree,
-    n_splits=10, seed=27, val_ratio=0.1
-):
+def cross_validate_decision_tree_with_val(X, y, DecisionTree, n_splits=10, seed=27, val_ratio=0.1, do_prune=False):
     """
     Outer 10-fold CV for final evaluation; inside each outer fold,
     carve a stratified validation from the outer training set to select
@@ -204,109 +237,61 @@ def cross_validate_decision_tree_with_val(
     to prevent leakage.
     """
     rng = default_rng(seed)
-    outer_tests = k_fold_test_indices(n_splits, len(y), rng)
-    labels_sorted = np.unique(y)
+    folds = train_test_k_fold(n_splits, len(y), rng)
+    labels_sorted = np.unique(y) # all unique class labels in sorted order
 
     C_total = np.zeros((len(labels_sorted), len(labels_sorted)), dtype=int)
     acc_per_fold = []
-    y_true_all, y_pred_all = [], []  # [ADD] aggregate labels for macro metrics
+    
+    y_true_all = []   
+    y_pred_all = []  
 
-    for k in range(n_splits):
-        test_idx = outer_tests[k]
-        trainval_idx = np.concatenate([outer_tests[i] for i in range(n_splits) if i != k])
+    for train_idx, test_idx in folds:
+        X_tr_raw, y_tr = X[train_idx], y[train_idx]
+        X_te_raw, y_te = X[test_idx], y[test_idx]
 
-        # ---- inner stratified split: train' and val (Lab1-style) ----
-        trp_idx, val_idx = split_indices_stratified(trainval_idx, y_full=y, val_ratio=val_ratio, rng=rng)
+        # normalize using training set stats
+        mean = X_tr_raw.mean(axis=0)
+        std  = X_tr_raw.std(axis=0)
+        std[std == 0] = 1.0
+        X_tr = (X_tr_raw - mean) / std
+        X_te = (X_te_raw - mean) / std
 
-        # ---- standardize using train' only; apply to train' and val ----
-        X_trp_raw, y_trp = X[trp_idx], y[trp_idx]
-        X_val_raw, y_val = X[val_idx], y[val_idx]
-        mean_trp = X_trp_raw.mean(axis=0)
-        std_trp  = X_trp_raw.std(axis=0); std_trp[std_trp == 0] = 1.0
-        X_trp = (X_trp_raw - mean_trp) / std_trp
-        X_val = (X_val_raw - mean_trp) / std_trp
+        # train and evaluation
+        clf = DecisionTree(X_tr, y_tr, X_te)
+        nodes = clf.fit(max_depth=max_depth, threshold=threshold)
+        y_pred = clf.predict(nodes)
 
-        # ---- hyper-parameter selection on (train', val) ----
-        best_acc, best_hp = -1.0, (None, None)
-        for max_depth, threshold in hyperparam_grid():
-            clf = DecisionTree(X_trp, y_trp, X_val)
-            nodes = clf.fit(max_depth=max_depth, threshold=threshold)
-            y_val_pred = clf.predict(nodes)
-            acc_val = np.mean(y_val_pred == y_val)
-            if acc_val > best_acc:
-                best_acc, best_hp = acc_val, (max_depth, threshold)
-
-        # ---- retrain on (train'∪val) with best HP; standardize with its stats ----
-        tr_full_idx = np.concatenate([trp_idx, val_idx])
-        X_tr_full_raw, y_tr_full = X[tr_full_idx], y[tr_full_idx]
-        X_te_raw, y_te           = X[test_idx],   y[test_idx]
-        mean_full = X_tr_full_raw.mean(axis=0)
-        std_full  = X_tr_full_raw.std(axis=0); std_full[std_full == 0] = 1.0
-        X_tr_full = (X_tr_full_raw - mean_full) / std_full
-        X_te      = (X_te_raw      - mean_full) / std_full
-
-        md, th = best_hp
-        clf = DecisionTree(X_tr_full, y_tr_full, X_te)
-        nodes = clf.fit(max_depth=md, threshold=th)
-        y_te_pred = clf.predict(nodes)
-
-        # ---- accumulate confusion matrix & collect labels ----
-        C_fold = confusion_matrix(y_te, y_te_pred, class_labels=labels_sorted)
+        # confusion matrix
+        C_fold = confusion_matrix(y_te, y_pred, class_labels=labels_sorted)
         C_total += C_fold
-        acc_per_fold.append(accuracy_from_confusion(C_fold))
-        y_true_all.append(y_te); y_pred_all.append(y_te_pred)
 
-    # ---- final metrics ----
-    y_true_all = np.concatenate(y_true_all)
-    y_pred_all = np.concatenate(y_pred_all)
+        # collect all true/pred labels across folds 
+        y_true_all.append(y_te)
+        y_pred_all.append(y_pred)
+
+        acc_per_fold.append(accuracy_from_confusion(C_fold))
+
+    # concatenate all true/pred labels across folds
+    y_true_all = np.concatenate(y_true_all)   
+    y_pred_all = np.concatenate(y_pred_all)   
 
     acc_total = accuracy_from_confusion(C_total)
-    p_vec, macro_p = precision(y_true_all, y_pred_all)
-    r_vec, macro_r = recall(y_true_all, y_pred_all)
-    f_vec, macro_f = f1_score(y_true_all, y_pred_all)
+    p_vec, macro_p = precision(y_true_all, y_pred_all)     
+    r_vec, macro_r = recall(y_true_all, y_pred_all)        
+    f_vec, macro_f = f1_score(y_true_all, y_pred_all)     
 
-    return {
+    results = {
         "labels": labels_sorted,
-        "confusion_matrix": C_total,                               # single 4×4 CM (rows=GT, cols=Pred)
-        "accuracy_from_cm": float(acc_total),                      # micro accuracy from aggregated CM
-        "accuracy_mean_over_folds": float(np.mean(acc_per_fold)),  # mean acc across folds
+        "confusion_matrix": C_total,                 
+        "accuracy_from_cm": float(acc_total),        
+        "accuracy_mean_over_folds": float(np.mean(acc_per_fold)),
         "accuracy_std_over_folds": float(np.std(acc_per_fold, ddof=1)) if len(acc_per_fold) > 1 else 0.0,
         "precision_per_class": p_vec,
         "recall_per_class": r_vec,
         "f1_per_class": f_vec,
         "macro_precision": float(macro_p),
         "macro_recall": float(macro_r),
-        "macro_f1": float(macro_f),
+        "macro_f1": float(macro_f)
     }
-
-
-#=================== Convenience: run Step3 on a file ===================
-
-def run_step3_for(filepath, DecisionTree,
-                  n_splits=10, seed=27, val_ratio=0.1):
-    """Load data (last column = label), run outer 10-fold CV with inner validation, and print a Step-3 report."""
-    data = np.loadtxt(filepath)
-    X = data[:, :-1]
-    y = np.round(data[:, -1]).astype(int)
-
-    res = cross_validate_decision_tree_with_val(
-        X, y, DecisionTree, n_splits=n_splits, seed=seed, val_ratio=val_ratio
-    )
-
-    print(f"\n=== {filepath} | {n_splits}-fold (with inner validation, val_ratio={val_ratio}) ===")
-    print("Labels:", res["labels"])
-    print("Confusion Matrix (single 4×4):\n", res["confusion_matrix"])
-    print(f"Accuracy (from aggregated CM): {res['accuracy_from_cm']:.4f}")
-    print(f"Accuracy (mean±std over folds): {res['accuracy_mean_over_folds']:.4f} ± {res['accuracy_std_over_folds']:.4f}")
-    for i, lab in enumerate(res["labels"]):
-        print(f"Class {lab}  Precision: {res['precision_per_class'][i]:.4f}  "
-              f"Recall: {res['recall_per_class'][i]:.4f}  F1: {res['f1_per_class'][i]:.4f}")
-    print(f"Macro Precision: {res['macro_precision']:.4f}  "
-          f"Macro Recall: {res['macro_recall']:.4f}  Macro F1: {res['macro_f1']:.4f}")
-    return res
-
-# =========================
-# Example usage 
-# =========================
-clean_res = run_step3_for('clean_dataset.txt', DecisionTree, n_splits=10, seed=27, val_ratio=0.1)
-noisy_res = run_step3_for('noisy_dataset.txt',  DecisionTree, n_splits=10, seed=27, val_ratio=0.1)
+    return results
