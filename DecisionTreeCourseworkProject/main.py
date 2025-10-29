@@ -34,7 +34,7 @@ def main():
     X = data[:, :-1]
     y = np.round(data[:, -1]).astype(int)
 
-    # No pruning, train and evaluate
+    # Before pruning
     if not args.prune:
         print("\n=== No pruning to be applied ===")
         res_before = cross_validate_decision_tree(
@@ -59,7 +59,7 @@ def main():
         print()
 
 
-    # Have pruning, train, evaluate, prune and evaluate
+    # After pruning (if enabled)
     if args.prune:
         print("\n=== Pruning to be applied ===")
         res_after = cross_validate_pruned_tree(
