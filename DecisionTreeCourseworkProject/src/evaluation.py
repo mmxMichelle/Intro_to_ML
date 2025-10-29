@@ -298,11 +298,18 @@ def cross_validate_pruned_tree(X, y, DecisionTree, filename,
     folds = train_test_k_fold(n_splits, len(y), rng)
     labels_sorted = np.unique(y)
 
-    C_total = np.zeros((len(labels_sorted), len(labels_sorted)), dtype=int)
-    acc_per_fold = []
+    # We'll collect both "before pruning" (unpruned tree trained on inner train)
+    # and "after pruning" (the same tree after reduced-error pruning) results.
+    C_total_before = np.zeros((len(labels_sorted), len(labels_sorted)), dtype=int)
+    C_total_after = np.zeros((len(labels_sorted), len(labels_sorted)), dtype=int)
 
-    y_true_all = []
-    y_pred_all = []
+    acc_per_fold_before = []
+    acc_per_fold_after = []
+
+    y_true_all_before = []
+    y_pred_all_before = []
+    y_true_all_after = []
+    y_pred_all_after = []
 
     current_fold = 0
     for train_idx, test_idx in folds:
@@ -334,51 +341,82 @@ def cross_validate_pruned_tree(X, y, DecisionTree, filename,
 
         # Train on inner training set
         clf = DecisionTree(X_tr, y_tr, X_te)
+        # train the unpruned tree on the inner training set
         nodes_unpruned = clf.fit(max_depth=max_depth, threshold=threshold)
 
-        # Prune using inner validation set
+        # Predict on the outer test set with the unpruned tree (before pruning)
+        y_pred_unpruned = clf.predict(nodes_unpruned)
+
+        # Prune using inner validation set (reduced-error pruning)
         nodes_pruned = prune_tree(nodes_unpruned, DecisionTree, X_tr, y_tr, X_val, y_val)
 
-        # Plot (pruned) tree
+        # Plot pruned tree
         plot_decision_tree(
             nodes_pruned,
             save_name_prefix=f"my_tree_on_{filename}_fold_{current_fold}_pruned",
             show_fig=False
         )
 
-        # Predict on test set using the pruned tree
-        y_pred = clf.predict(nodes_pruned)
+        # Predict on the outer test set with the pruned tree (after pruning)
+        y_pred_pruned = clf.predict(nodes_pruned)
 
-        C_fold = confusion_matrix(y_te, y_pred, class_labels=labels_sorted)
-        C_total += C_fold
+        # accumulate confusion matrices for before/after (fixed label order)
+        C_fold_before = confusion_matrix(y_te, y_pred_unpruned, class_labels=labels_sorted)
+        C_fold_after = confusion_matrix(y_te, y_pred_pruned, class_labels=labels_sorted)
+        C_total_before += C_fold_before
+        C_total_after += C_fold_after
 
-        y_true_all.append(y_te)
-        y_pred_all.append(y_pred)
+        # collect labels/predictions
+        y_true_all_before.append(y_te)
+        y_pred_all_before.append(y_pred_unpruned)
+        y_true_all_after.append(y_te)
+        y_pred_all_after.append(y_pred_pruned)
 
-        acc_per_fold.append(accuracy_from_confusion(C_fold))
+        acc_per_fold_before.append(accuracy_from_confusion(C_fold_before))
+        acc_per_fold_after.append(accuracy_from_confusion(C_fold_after))
 
         current_fold += 1
 
-    y_true_all = np.concatenate(y_true_all)
-    y_pred_all = np.concatenate(y_pred_all)
+    # splice and compute metrics for the "before" (unpruned) experiment
+    y_true_all_before = np.concatenate(y_true_all_before)
+    y_pred_all_before = np.concatenate(y_pred_all_before)
+    acc_total_before = accuracy_from_confusion(C_total_before)
+    p_vec_before, macro_p_before = precision(y_true_all_before, y_pred_all_before)
+    r_vec_before, macro_r_before = recall(y_true_all_before, y_pred_all_before)
+    f_vec_before, macro_f_before = f1_score(y_true_all_before, y_pred_all_before)
 
-    acc_total = accuracy_from_confusion(C_total)
-    p_vec, macro_p = precision(y_true_all, y_pred_all)
-    r_vec, macro_r = recall(y_true_all, y_pred_all)
-    f_vec, macro_f = f1_score(y_true_all, y_pred_all)
+    # splice and compute metrics for the "after" (pruned) experiment
+    y_true_all_after = np.concatenate(y_true_all_after)
+    y_pred_all_after = np.concatenate(y_pred_all_after)
+    acc_total_after = accuracy_from_confusion(C_total_after)
+    p_vec_after, macro_p_after = precision(y_true_all_after, y_pred_all_after)
+    r_vec_after, macro_r_after = recall(y_true_all_after, y_pred_all_after)
+    f_vec_after, macro_f_after = f1_score(y_true_all_after, y_pred_all_after)
 
     results = {
         "labels": labels_sorted,
-        "confusion_matrix": C_total,
-        "accuracy_from_cm": float(acc_total),
-        "accuracy_mean_over_folds": float(np.mean(acc_per_fold)),
-        "accuracy_std_over_folds": float(np.std(acc_per_fold, ddof=1)) if len(acc_per_fold) > 1 else 0.0,
-        "precision_per_class": p_vec,
-        "recall_per_class": r_vec,
-        "f1_per_class": f_vec,
-        "macro_precision": float(macro_p),
-        "macro_recall": float(macro_r),
-        "macro_f1": float(macro_f)
+        # keep backward-compatible key mapping to the pruned (after) confusion matrix
+        "confusion_matrix": C_total_after,
+        # full paired outputs
+        "confusion_matrix_before_pruning": C_total_before,
+        "accuracy_from_cm_before": float(acc_total_before),
+        "accuracy_from_cm_after": float(acc_total_after),
+        "accuracy_mean_over_folds_before": float(np.mean(acc_per_fold_before)) if len(acc_per_fold_before) > 0 else 0.0,
+        "accuracy_std_over_folds_before": float(np.std(acc_per_fold_before, ddof=1)) if len(acc_per_fold_before) > 1 else 0.0,
+        "accuracy_mean_over_folds_after": float(np.mean(acc_per_fold_after)) if len(acc_per_fold_after) > 0 else 0.0,
+        "accuracy_std_over_folds_after": float(np.std(acc_per_fold_after, ddof=1)) if len(acc_per_fold_after) > 1 else 0.0,
+        "precision_per_class_before": p_vec_before,
+        "recall_per_class_before": r_vec_before,
+        "f1_per_class_before": f_vec_before,
+        "macro_precision_before": float(macro_p_before),
+        "macro_recall_before": float(macro_r_before),
+        "macro_f1_before": float(macro_f_before),
+        "precision_per_class": p_vec_after,
+        "recall_per_class": r_vec_after,
+        "f1_per_class": f_vec_after,
+        "macro_precision": float(macro_p_after),
+        "macro_recall": float(macro_r_after),
+        "macro_f1": float(macro_f_after)
     }
     return results
 

@@ -65,12 +65,26 @@ def main():
             n_splits=args.folds, seed=args.seed,
             max_depth=args.max_depth, threshold=args.threshold
         )
-        print(f"\n=== {args.dataset} | {args.folds}-fold CV ===")
+        # The returned results now contain paired before/after metrics for the pruning experiment.
+        print(f"\n=== {args.dataset} | {args.folds}-fold CV (pruning experiment) ===")
         print("Labels:", res_after["labels"])
+
+        # Before pruning (apples-to-apples — same inner-trained tree evaluated on outer test)
+        print("\n-- Before pruning (trained on inner-train, evaluated on outer-test) --")
+        print("Confusion Matrix (single 4×4):\n", res_after["confusion_matrix_before_pruning"])
+        print(f"Accuracy (from aggregated CM): {res_after['accuracy_from_cm_before']:.4f}")
+        print(f"Accuracy (mean±std over folds): {res_after['accuracy_mean_over_folds_before']:.4f} ± {res_after['accuracy_std_over_folds_before']:.4f}")
+        for i, lab in enumerate(res_after["labels"]):
+            print(f"Class {lab}  Precision: {res_after['precision_per_class_before'][i]:.4f}  "
+                  f"Recall: {res_after['recall_per_class_before'][i]:.4f}  F1: {res_after['f1_per_class_before'][i]:.4f}")
+        print(f"Macro Precision: {res_after['macro_precision_before']:.4f}  "
+              f"Macro Recall: {res_after['macro_recall_before']:.4f}  Macro F1: {res_after['macro_f1_before']:.4f}")
+
+        # After pruning (pruned tree evaluated on same outer-test)
+        print("\n-- After pruning (pruned using inner-val, evaluated on outer-test) --")
         print("Confusion Matrix (single 4×4):\n", res_after["confusion_matrix"])
-        print(f"Accuracy (from aggregated CM): {res_after['accuracy_from_cm']:.4f}")
-        print(
-            f"Accuracy (mean±std over folds): {res_after['accuracy_mean_over_folds']:.4f} ± {res_after['accuracy_std_over_folds']:.4f}")
+        print(f"Accuracy (from aggregated CM): {res_after['accuracy_from_cm_after']:.4f}")
+        print(f"Accuracy (mean±std over folds): {res_after['accuracy_mean_over_folds_after']:.4f} ± {res_after['accuracy_std_over_folds_after']:.4f}")
         for i, lab in enumerate(res_after["labels"]):
             print(f"Class {lab}  Precision: {res_after['precision_per_class'][i]:.4f}  "
                   f"Recall: {res_after['recall_per_class'][i]:.4f}  F1: {res_after['f1_per_class'][i]:.4f}")
@@ -78,8 +92,9 @@ def main():
               f"Macro Recall: {res_after['macro_recall']:.4f}  Macro F1: {res_after['macro_f1']:.4f}")
         print()
 
-        # Save results
-        np.save(f"result/confusion_matrix_on_{filename}_after.npy", res_after["confusion_matrix"])
+        # Save results: save both paired confusion matrices for the pruning experiment
+        np.save(f"result/confusion_matrix_on_{filename}_prune_experiment_before.npy", res_after["confusion_matrix_before_pruning"])
+        np.save(f"result/confusion_matrix_on_{filename}_prune_experiment_after.npy", res_after["confusion_matrix"])
 
     # Save results
     np.save(f"result/confusion_matrix_on_{filename}_before.npy", res_before["confusion_matrix"])
