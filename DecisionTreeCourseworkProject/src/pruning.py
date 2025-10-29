@@ -1,10 +1,10 @@
-("""Post-pruning utilities for the decision tree.
+"""Post-pruning utilities for the decision tree.
 
 This module implements Reduced Error Pruning operating on the existing
 `nodes_dict` tree representation used by the project. The functions here
 work directly with the dictionary representation and with the project's
 DecisionTree class for predictions.
-""")
+"""
 
 from typing import List
 import copy
@@ -170,4 +170,3 @@ def prune_tree(nodes_dict: dict, DecisionTree, X_train: np.ndarray, y_train: np.
 			break
 
 	return pruned_nodes
-
