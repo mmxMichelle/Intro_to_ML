@@ -205,7 +205,7 @@ def train_test_k_fold(n_folds, n_instances, random_generator=default_rng()):
 
 def cross_validate_decision_tree(X, y, DecisionTree, filename,
                                  n_splits=10, seed=27,
-                                 max_depth=20, threshold=1e-3, show_trees=False):
+                                 max_depth=20, threshold=1e-3):
     """
     10-fold CV on (X, y), with per-fold standardization (train-fold stats only).
     Accumulate a single 4×4 confusion matrix and compute metrics required by Step 3.
@@ -221,7 +221,7 @@ def cross_validate_decision_tree(X, y, DecisionTree, filename,
     y_true_all = []
     y_pred_all = []
 
-    current_fold = 0 # to keep track of the current fold used
+    current_fold = 0  # to keep track of the current fold used
     for train_idx, test_idx in folds:
         X_tr_raw, y_tr = X[train_idx], y[train_idx]
         X_te_raw, y_te = X[test_idx], y[test_idx]
@@ -248,8 +248,8 @@ def cross_validate_decision_tree(X, y, DecisionTree, filename,
         # Cumulative confusion matrix (fixed label order)
         C_fold = confusion_matrix(y_te, y_pred, class_labels=labels_sorted)
         C_total += C_fold
-        
-        # collect all true/pred labels across folds 
+
+        # collect all true/pred labels across folds
         y_true_all.append(y_te)
         y_pred_all.append(y_pred)
 
@@ -284,8 +284,8 @@ def cross_validate_decision_tree(X, y, DecisionTree, filename,
 
 
 def cross_validate_pruned_tree(X, y, DecisionTree, filename,
-                                n_splits=10, seed=27,
-                                max_depth=20, threshold=1e-3, show_trees=False):
+                               n_splits=10, seed=27,
+                               max_depth=20, threshold=1e-3):
     """10-fold CV with internal validation set used for reduced-error pruning.
 
     This function mirrors `cross_validate_decision_tree` but, for each outer
@@ -402,9 +402,11 @@ def cross_validate_pruned_tree(X, y, DecisionTree, filename,
         "accuracy_from_cm_before": float(acc_total_before),
         "accuracy_from_cm_after": float(acc_total_after),
         "accuracy_mean_over_folds_before": float(np.mean(acc_per_fold_before)) if len(acc_per_fold_before) > 0 else 0.0,
-        "accuracy_std_over_folds_before": float(np.std(acc_per_fold_before, ddof=1)) if len(acc_per_fold_before) > 1 else 0.0,
+        "accuracy_std_over_folds_before": float(np.std(acc_per_fold_before, ddof=1)) if len(
+            acc_per_fold_before) > 1 else 0.0,
         "accuracy_mean_over_folds_after": float(np.mean(acc_per_fold_after)) if len(acc_per_fold_after) > 0 else 0.0,
-        "accuracy_std_over_folds_after": float(np.std(acc_per_fold_after, ddof=1)) if len(acc_per_fold_after) > 1 else 0.0,
+        "accuracy_std_over_folds_after": float(np.std(acc_per_fold_after, ddof=1)) if len(
+            acc_per_fold_after) > 1 else 0.0,
         "precision_per_class_before": p_vec_before,
         "recall_per_class_before": r_vec_before,
         "f1_per_class_before": f_vec_before,
@@ -419,4 +421,3 @@ def cross_validate_pruned_tree(X, y, DecisionTree, filename,
         "macro_f1": float(macro_f_after)
     }
     return results
-
