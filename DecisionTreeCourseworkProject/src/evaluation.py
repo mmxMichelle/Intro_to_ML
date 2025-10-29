@@ -212,12 +212,12 @@ def cross_validate_decision_tree(X, y, DecisionTree, filename,
     """
     rng = default_rng(seed)
     folds = train_test_k_fold(n_splits, len(y), rng)
-    labels_sorted = np.unique(y)  # 固定标签顺序（通常为 4 类）
+    labels_sorted = np.unique(y)  # all unique class labels in sorted order
 
     C_total = np.zeros((len(labels_sorted), len(labels_sorted)), dtype=int)
     acc_per_fold = []
 
-    # to directly reuse your existing precision/recall/f1 interface, here is a summary of all folded y_true/y_pred
+    # summary of all folded y_true/y_pred
     y_true_all = []
     y_pred_all = []
 
@@ -248,7 +248,8 @@ def cross_validate_decision_tree(X, y, DecisionTree, filename,
         # Cumulative confusion matrix (fixed label order)
         C_fold = confusion_matrix(y_te, y_pred, class_labels=labels_sorted)
         C_total += C_fold
-
+        
+        # collect all true/pred labels across folds 
         y_true_all.append(y_te)
         y_pred_all.append(y_pred)
 

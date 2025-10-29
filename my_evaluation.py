@@ -229,7 +229,7 @@ def split_for_nested(idx_all, y_full, val_ratio=0.1, rng=None):
 
 
 #====================== Step 3 Core (10-fold CV) ======================
-def cross_validate_decision_tree_with_val(X, y, DecisionTree, n_splits=10, seed=27, val_ratio=0.1, do_prune=False):
+def cross_validate_decision_tree_with_val(X, y, DecisionTree, n_splits=10, seed=27):
     """
     Outer 10-fold CV for final evaluation; inside each outer fold,
     carve a stratified validation from the outer training set to select
