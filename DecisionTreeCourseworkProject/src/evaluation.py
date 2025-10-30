@@ -316,65 +316,68 @@ def cross_validate_pruned_tree(X, y, DecisionTree, filename,
         # outer train/test split
         X_train_val_raw, y_train_val = X[train_idx], y[train_idx]
         X_te_raw, y_te = X[test_idx], y[test_idx]
-
-        # create inner train/validation split (90/10)
+        # create inner k-folds over the outer-training portion. We want to
+        # perform (n_splits-1)-fold CV inside the outer fold so that for each
+        # inner iteration we train on (n_splits-2) parts, validate (prune) on
+        # one part, and finally evaluate on the fixed outer test set.
+        n_inner = max(1, n_splits - 1)
         rng_inner = default_rng(seed + current_fold)
-        shuffled_indices = rng_inner.permutation(len(X_train_val_raw))
-        split_point = int(0.9 * len(X_train_val_raw))
-        if split_point < 1:
-            # fallback: if too small, assign at least one sample
-            split_point = max(1, len(X_train_val_raw) - 1)
+        inner_folds = train_test_k_fold(n_inner, len(X_train_val_raw), rng_inner)
 
-        train_inner_idx = shuffled_indices[:split_point]
-        val_idx = shuffled_indices[split_point:]
+        # iterate through each inner fold (this yields n_inner runs per outer fold)
+        inner_run = 0
+        for inner_train_rel_idx, inner_val_rel_idx in inner_folds:
+            # map relative inner indices to actual arrays
+            X_tr_raw, y_tr = X_train_val_raw[inner_train_rel_idx], y_train_val[inner_train_rel_idx]
+            X_val_raw, y_val = X_train_val_raw[inner_val_rel_idx], y_train_val[inner_val_rel_idx]
 
-        X_tr_raw, y_tr = X_train_val_raw[train_inner_idx], y_train_val[train_inner_idx]
-        X_val_raw, y_val = X_train_val_raw[val_idx], y_train_val[val_idx]
+            # normalization computed from inner training set only
+            mean = X_tr_raw.mean(axis=0)
+            std = X_tr_raw.std(axis=0)
+            std[std == 0] = 1.0
+            X_tr = (X_tr_raw - mean) / std
+            X_val = (X_val_raw - mean) / std
+            X_te = (X_te_raw - mean) / std
 
-        # normalization: compute mean/std from inner training set only
-        mean = X_tr_raw.mean(axis=0)
-        std = X_tr_raw.std(axis=0)
-        std[std == 0] = 1.0
-        X_tr = (X_tr_raw - mean) / std
-        X_val = (X_val_raw - mean) / std
-        X_te = (X_te_raw - mean) / std
+            # Train on inner training set
+            clf = DecisionTree(X_tr, y_tr, X_te)
+            nodes_unpruned = clf.fit(max_depth=max_depth, threshold=threshold)
 
-        # Train on inner training set
-        clf = DecisionTree(X_tr, y_tr, X_te)
-        # train the unpruned tree on the inner training set
-        nodes_unpruned = clf.fit(max_depth=max_depth, threshold=threshold)
+            # Predict on the outer test set with the unpruned tree (before pruning)
+            y_pred_unpruned = clf.predict(nodes_unpruned)
 
-        # Predict on the outer test set with the unpruned tree (before pruning)
-        y_pred_unpruned = clf.predict(nodes_unpruned)
+            # Prune using inner validation set (reduced-error pruning)
+            nodes_pruned = prune_tree(nodes_unpruned, DecisionTree, X_tr, y_tr, X_val, y_val)
 
-        # Prune using inner validation set (reduced-error pruning)
-        nodes_pruned = prune_tree(nodes_unpruned, DecisionTree, X_tr, y_tr, X_val, y_val)
+            # Plot pruned tree (include inner_run to make filenames unique)
+            plot_decision_tree(
+                nodes_pruned,
+                save_name_prefix=f"my_tree_on_{filename}_fold_{current_fold}_inner_{inner_run}_pruned",
+                show_fig=False
+            )
 
-        # Plot pruned tree
-        plot_decision_tree(
-            nodes_pruned,
-            save_name_prefix=f"my_tree_on_{filename}_fold_{current_fold}_pruned",
-            show_fig=False
-        )
+            # Predict on the outer test set with the pruned tree (after pruning)
+            y_pred_pruned = clf.predict(nodes_pruned)
 
-        # Predict on the outer test set with the pruned tree (after pruning)
-        y_pred_pruned = clf.predict(nodes_pruned)
+            # accumulate confusion matrices for before/after (fixed label order)
+            C_fold_before = confusion_matrix(y_te, y_pred_unpruned, class_labels=labels_sorted)
+            C_fold_after = confusion_matrix(y_te, y_pred_pruned, class_labels=labels_sorted)
+            C_total_before += C_fold_before
+            C_total_after += C_fold_after
 
-        # accumulate confusion matrices for before/after (fixed label order)
-        C_fold_before = confusion_matrix(y_te, y_pred_unpruned, class_labels=labels_sorted)
-        C_fold_after = confusion_matrix(y_te, y_pred_pruned, class_labels=labels_sorted)
-        C_total_before += C_fold_before
-        C_total_after += C_fold_after
+            # collect labels/predictions (append per inner run)
+            y_true_all_before.append(y_te)
+            y_pred_all_before.append(y_pred_unpruned)
+            y_true_all_after.append(y_te)
+            y_pred_all_after.append(y_pred_pruned)
 
-        # collect labels/predictions
-        y_true_all_before.append(y_te)
-        y_pred_all_before.append(y_pred_unpruned)
-        y_true_all_after.append(y_te)
-        y_pred_all_after.append(y_pred_pruned)
+            # collect per-inner-run accuracies
+            acc_per_fold_before.append(accuracy_from_confusion(C_fold_before))
+            acc_per_fold_after.append(accuracy_from_confusion(C_fold_after))
 
-        acc_per_fold_before.append(accuracy_from_confusion(C_fold_before))
-        acc_per_fold_after.append(accuracy_from_confusion(C_fold_after))
+            inner_run += 1
 
+        # advance outer fold counter
         current_fold += 1
 
     # splice and compute metrics for the "before" (unpruned) experiment
