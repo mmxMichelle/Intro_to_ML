@@ -18,18 +18,27 @@ All scripts should be run from the project root directory.
 To run the full pipeline (training, evaluation, pruning, re-evaluation):
 
 ```bash
+python main.py
 python main.py --prune
+python main.py --dataset data/noisy_dataset.txt
 python main.py --dataset data/noisy_dataset.txt --prune
 ```
 
-This will:
-(1) Load both datasets from the 'data/' folder.
-(2) Train decision trees with k-fold cross-validation (Dfault k=10).
-(3) Plot the trees trained by different folds of data and save to 'result/visual_tree/' directory (not show plots).
-(4) Evaluate performance metrics (confusion matrix, accuracy, recall, precision, F1-score).
-(5) Apply pruning and repeat the evaluation.
-(6) [Bonus] Train the decision tree on the whole clean dataset and plot the tree (show plot).
-(6) Save confusion matrix results to the 'results/' directory.
+The first and third commands will run the 10-flod cross validation on the clean dataset and noisy dataset respectively. 
+This includes:
+  (1) data loading and splliting (10 folds)
+  (2) 1 fold for testing, 9 folds for training
+  (3) train decision tree, plot tree, evaluate tree on testing fold
+  (4) until all folds have been used for testing, switch to a new fold for testing, repeat (2) to (3)
+  (5) return average evaluation result
+The second and forth commands will run the 10-flod nested cross validation on both datasets, giving evaluation results before and after pruning.
+This includes:
+  (1) data loading and splliting (10 folds)
+  (2) 1 fold for testing, 1 fold for validating pruning, 8 folds for training
+  (3) train decision tree, plot tree, prune tree by validation fold, evaluate tree on testing fold
+  (4) except the testing fold, until all folds have been used for validating, switch to a new fold for validating, repeat (2) to (3)
+  (5) until all folds have been used for testing, switch to a new fold for testing, repeat (2) to (4)
+  (5) return average evaluation result
 
 
 0.2. Command-Line Arguments
@@ -102,7 +111,7 @@ pip install -r requirements.txt
 
 ## 4. Output Description
 
-4.1 Example of printed outputs
+4.1 Example of printed outputs (only for reference)
 
 ```
 === Pruning to be applied ===
@@ -214,4 +223,5 @@ Macro Precision: 0.8172  Macro Recall: 0.8169  Macro F1: 0.8170
 - Random seed: 42
 - Only NumPy, Matplotlib, and built-in Python modules are used.
 - Code tested on DoC lab Linux machines (Python 3 environment).
+
 
