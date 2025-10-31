@@ -6,7 +6,7 @@ work directly with the dictionary representation and with the project's
 DecisionTree class for predictions.
 """
 
-from typing import List
+from typing import List, Dict
 import copy
 import numpy as np
 
@@ -57,121 +57,136 @@ def is_prunable(node_key: str, nodes_dict: dict) -> bool:
 	return nodes_dict[left]['leaf'][0] and nodes_dict[right]['leaf'][0]
 
 
-def _indices_reaching_node(nodes_dict: dict, node_key: str, X: np.ndarray) -> np.ndarray:
-	"""Return boolean indices of rows in X that would reach node_key.
-
-	This simulates routing each sample from the root and records which
-	samples end up at the requested node.
+def compute_node_reach_indices(nodes_dict: dict, X: np.ndarray) -> Dict[str, np.ndarray]:
 	"""
-	n_samples = X.shape[0]
-	indices = np.zeros(n_samples, dtype=bool)
-	for i in range(n_samples):
+	For every node key in nodes_dict, compute the indices of rows in X whose
+	path from the root includes that node. Returns a mapping node_key -> np.array(indices).
+	Complexity: O(n_samples * depth) — done ONCE per pass.
+	"""
+	n = X.shape[0]
+	node_to_indices = {k: [] for k in nodes_dict.keys()}  # build lists then convert
+	for i in range(n):
 		cur = 'n_0'
 		x = X[i]
-		# walk until leaf or the requested node
+		# walk until leaf or missing
 		while True:
-			if cur == node_key:
-				indices[i] = True
+			# record that sample i visits cur node
+			if cur in node_to_indices:
+				node_to_indices[cur].append(i)
+			else:
+				# safety: if tree has broken keys, stop
 				break
 			info = nodes_dict[cur]
 			if info['leaf'][0]:
-				# arrived at leaf that is not the node_key
 				break
 			attr = info['attribute']
 			val = info['value']
+			# if attr is None (shouldn't be for internal nodes), break
+			if attr is None:
+				break
 			if x[attr] < val:
 				cur = info['left']
 			else:
 				cur = info['right']
-			# safety: if navigation goes to a missing key, stop
 			if cur not in nodes_dict:
 				break
-	return indices
+	# convert lists to numpy arrays (empty lists -> empty arrays)
+	for k, lst in node_to_indices.items():
+		node_to_indices[k] = np.array(lst, dtype=int) if lst else np.zeros(0, dtype=int)
+	return node_to_indices
 
 
 def prune_tree(nodes_dict: dict, DecisionTree, X_train: np.ndarray, y_train: np.ndarray,
 			   X_val: np.ndarray, y_val: np.ndarray) -> dict:
-	"""Perform reduced-error post-pruning on the provided tree.
-
-	The algorithm iteratively considers internal nodes that have leaf
-	children (i.e. prunable). For each prunable node it replaces the
-	subtree by a leaf with the majority label of the training samples
-	that reach that node. The replacement is kept only if it improves
-	accuracy on the validation set.
-
-	Args:
-		nodes_dict: original tree dictionary to prune (will not be mutated).
-		DecisionTree: the DecisionTree class (used to create a predictor).
-		X_train, y_train: training data used to determine majority labels
-			for nodes being pruned.
-		X_val, y_val: validation data used to evaluate pruning decisions.
-
-	Returns:
-		A new nodes_dict dictionary representing the pruned tree.
+	"""
+	Reduced-error pruning optimized:
+	- precompute which samples reach each node (train+val)
+	- compute baseline predictions on val once per pass
+	- evaluate a candidate by adjusting only those val preds that reach the candidate node
 	"""
 	pruned_nodes = copy.deepcopy(nodes_dict)
 
-	# validator that will be used to evaluate accuracy on validation set
-	# when predicting we need a DecisionTree instance whose train_y exists
-	# so predictions have the correct dtype
 	while True:
+		# Precompute sample→node visits for pruned_nodes
+		train_node_indices = compute_node_reach_indices(pruned_nodes, X_train)
+		val_node_indices = compute_node_reach_indices(pruned_nodes, X_val)
+
+		# validator only used for dtype etc. We don't call predict repeatedly now.
 		validator = DecisionTree(X_train, y_train, X_val)
-		# baseline accuracy with current pruned_nodes (static for this pass)
+		# baseline predictions once for this pass
 		y_val_pred = validator.predict(pruned_nodes)
 		baseline_accuracy = float(np.mean(y_val_pred == y_val))
-		# track the best accuracy found during this pass (starts at baseline)
-		current_pass_best_acc = baseline_accuracy
-		best_candidate_tree = None
 
+		current_pass_best_acc = baseline_accuracy
+		best_candidate = None  # will hold (node_key, majority_label) if found
+
+		# iterate internal nodes once
 		internal_nodes = get_internal_nodes(pruned_nodes)
 
 		for node_key in internal_nodes:
 			if not is_prunable(node_key, pruned_nodes):
 				continue
 
-			# simulate pruning at node_key
-			temp_tree = copy.deepcopy(pruned_nodes)
-
 			# find training samples that reach node_key to compute majority label
-			idx_mask = _indices_reaching_node(temp_tree, node_key, X_train)
-			if np.any(idx_mask):
-				labels_here = y_train[idx_mask]
-				unique, counts = np.unique(labels_here, return_counts=True)
-				majority_label = unique[np.argmax(counts)]
+			train_idx = train_node_indices.get(node_key, np.zeros(0, dtype=int))
+			if train_idx.size > 0:
+				labels_here = y_train[train_idx]
+				# use bincount if labels are non-negative integers and small range
+				if np.issubdtype(labels_here.dtype, np.integer) and labels_here.size > 0:
+					min_label = labels_here.min()
+					if min_label >= 0:
+						# shift to zero-based if necessary
+						shift = 0
+						if min_label != 0:
+							labels_shifted = labels_here - min_label
+							counts = np.bincount(labels_shifted)
+							majority_label = np.argmax(counts) + min_label
+						else:
+							counts = np.bincount(labels_here)
+							majority_label = np.argmax(counts)
+					else:
+						# fallback
+						unique, counts = np.unique(labels_here, return_counts=True)
+						majority_label = unique[np.argmax(counts)]
+				else:
+					unique, counts = np.unique(labels_here, return_counts=True)
+					majority_label = unique[np.argmax(counts)]
 			else:
-				# fallback: use majority of the two child leaves' labels
-				left = temp_tree[node_key]['left']
-				right = temp_tree[node_key]['right']
-				left_label = temp_tree[left]['leaf'][1]
-				right_label = temp_tree[right]['leaf'][1]
-				# simple majority between two labels (if tie, pick left)
+				# fallback: majority of the two child leaves' labels
+				left = pruned_nodes[node_key]['left']
+				right = pruned_nodes[node_key]['right']
+				left_label = pruned_nodes[left]['leaf'][1]
+				right_label = pruned_nodes[right]['leaf'][1]
 				majority_label = left_label if left_label == right_label else left_label
 
-			# convert node_key to a leaf in temp_tree
-			temp_tree[node_key]['leaf'] = (True, int(majority_label))
-			temp_tree[node_key]['attribute'] = None
-			temp_tree[node_key]['value'] = None
-			temp_tree[node_key]['left'] = None
-			temp_tree[node_key]['right'] = None
+			# determine which val samples are affected by pruning this node
+			val_idx = val_node_indices.get(node_key, np.zeros(0, dtype=int))
+			if val_idx.size == 0:
+				# if no val samples reach node, pruning won't change val accuracy;
+				# but you may still want to treat it as improvement only if baseline unchanged.
+				acc_temp = baseline_accuracy
+			else:
+				# simulate effect: only change predictions for these indices
+				y_temp = y_val_pred.copy()
+				y_temp[val_idx] = majority_label
+				acc_temp = float(np.mean(y_temp == y_val))
 
-			# evaluate on validation set
-			validator_temp = DecisionTree(X_train, y_train, X_val)
-			y_val_pred_temp = validator_temp.predict(temp_tree)
-			acc_temp = float(np.mean(y_val_pred_temp == y_val))
-
-			# compare against the running max for this pass so we keep the
-			# single best candidate found in this iteration (while baseline
-			# remains the original accuracy at loop start)
+			# keep best (>= as original)
 			if acc_temp >= current_pass_best_acc:
 				current_pass_best_acc = acc_temp
-				best_candidate_tree = temp_tree
+				best_candidate = (node_key, int(majority_label))
 
-		if best_candidate_tree is not None:
-			pruned_nodes = best_candidate_tree
-			# continue the outer loop to search for further improvements
+		if best_candidate is not None:
+			# apply the single best candidate to pruned_nodes (mutate in-place)
+			node_key, maj_label = best_candidate
+			pruned_nodes[node_key]['leaf'] = (True, int(maj_label))
+			pruned_nodes[node_key]['attribute'] = None
+			pruned_nodes[node_key]['value'] = None
+			pruned_nodes[node_key]['left'] = None
+			pruned_nodes[node_key]['right'] = None
+			# loop again (recompute node-to-sample maps)
 			continue
 		else:
-			# no improvement found, finish
 			break
 
 	return pruned_nodes

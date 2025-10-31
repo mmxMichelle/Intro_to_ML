@@ -152,8 +152,8 @@ class DecisionTree:
         return:
             label type:attribute, float:value, float:maximum information gain
         """
-        candidate_list = np.empty((0, 3))
         entropy_0 = self.calculate_entropy(y)
+        candidates = []  # list of tuples (feature_index, split_value, IG)
 
         for i in range(x.shape[1]):
             # sorts samples by feature i
@@ -161,33 +161,24 @@ class DecisionTree:
             sorted_x = x[sorted_idx]
             sorted_y = y[sorted_idx]
 
-            for j in range(len(sorted_y)-1):
-                if sorted_y[j] != sorted_y[j+1]:
-                    # check the information gain (IG) at each position where adjacent samples have different labels
-                    model_split_value = (sorted_x[j, i] + sorted_x[j+1, i]) / 2
-                    s1 = sorted_y[sorted_x[:, i] < model_split_value]
-                    s2 = sorted_y[sorted_x[:, i] >= model_split_value]
-
-                    # if s1 or s2 is empty, the split is useless, jump to next iteration
-                    if len(s1)==0 or len(s2)==0:
+            for j in range(len(sorted_y) - 1):
+                if sorted_y[j] != sorted_y[j + 1]:
+                    # candidate split between j and j+1
+                    val = (sorted_x[j, i] + sorted_x[j + 1, i]) / 2
+                    # partitions for this split
+                    s1 = sorted_y[sorted_x[:, i] < val]
+                    s2 = sorted_y[sorted_x[:, i] >= val]
+                    if len(s1) == 0 or len(s2) == 0:
                         continue
-
-                    # calculate information gain for splitting into s1 and s2
                     p_left = (j + 1) / len(sorted_y)
                     p_right = 1 - p_left
                     IG = entropy_0 - p_left * self.calculate_entropy(s1) - p_right * self.calculate_entropy(s2)
+                    candidates.append((int(i), float(val), float(IG)))
 
-                    value = (sorted_x[j, i] + sorted_x[j+1, i]) / 2
-                    # value is the splitting point value for feature i
-
-                    new_candidate = np.array([i, value, IG])
-                    candidate_list = np.append(candidate_list, [new_candidate], axis=0)
-
-        # if no best split is found, let max_IG = 0 so that it shall be below threshold and classified as leaf node
-        if len(candidate_list) == 0:
+        if not candidates:
             return 0, 0.0, 0.0
 
-        max_IG_idx = np.argmax(candidate_list[:, 2])
-
-        return int(candidate_list[max_IG_idx, 0]), candidate_list[max_IG_idx, 1], candidate_list[max_IG_idx, 2]
+        # pick candidate with max IG
+        best = max(candidates, key=lambda t: t[2])
+        return int(best[0]), best[1], best[2]
 
