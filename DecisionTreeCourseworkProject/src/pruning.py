@@ -190,3 +190,19 @@ def prune_tree(nodes_dict: dict, DecisionTree, X_train: np.ndarray, y_train: np.
 			break
 
 	return pruned_nodes
+
+def compute_average_depth(nodes_dict: dict, root_key: str = 'n_0') -> float:
+	"""Compute the average depth of all leaf nodes in the tree."""
+	def _dfs(node_key: str, depth: int, depths: list):
+		node = nodes_dict[node_key]
+		if node['leaf'][0]:
+			depths.append(depth)
+			return
+		if node.get('left'):
+			_dfs(node['left'], depth + 1, depths)
+		if node.get('right'):
+			_dfs(node['right'], depth + 1, depths)
+	depths = []
+	_dfs(root_key, 0, depths)
+	return float(np.mean(depths)) if depths else 0.0
+
