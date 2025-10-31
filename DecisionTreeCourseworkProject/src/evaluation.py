@@ -2,7 +2,7 @@ import numpy as np
 from numpy.random import default_rng
 from src.visualization import plot_decision_tree
 from src.decision_tree import DecisionTree
-from .pruning import prune_tree
+from .pruning import prune_tree, compute_average_depth
 
 
 # -------Evaluation Matrix----------------
@@ -216,6 +216,7 @@ def cross_validate_decision_tree(X, y, DecisionTree, filename,
 
     C_total = np.zeros((len(labels_sorted), len(labels_sorted)), dtype=int)
     acc_per_fold = []
+    avg_depths = []
 
     # summary of all folded y_true/y_pred
     y_true_all = []
@@ -236,6 +237,7 @@ def cross_validate_decision_tree(X, y, DecisionTree, filename,
         # Training and prediction (follow your DecisionTree(train_x, train_y, test_x) interface
         clf = DecisionTree(X_tr, y_tr, X_te)
         nodes = clf.fit(max_depth=max_depth, threshold=threshold)
+        avg_depths.append(compute_average_depth(nodes))
         y_pred = clf.predict(nodes)
 
         # Plot the tree and save
@@ -278,7 +280,8 @@ def cross_validate_decision_tree(X, y, DecisionTree, filename,
         "f1_per_class": f_vec,
         "macro_precision": float(macro_p),
         "macro_recall": float(macro_r),
-        "macro_f1": float(macro_f)
+        "macro_f1": float(macro_f),
+        "average_depth": float(np.mean(avg_depths))
     }
     return results
 
@@ -305,6 +308,9 @@ def cross_validate_pruned_tree(X, y, DecisionTree, filename,
 
     acc_per_fold_before = []
     acc_per_fold_after = []
+    
+    avg_depths_before = []
+    avg_depths_after = []
 
     y_true_all_before = []
     y_pred_all_before = []
@@ -342,12 +348,14 @@ def cross_validate_pruned_tree(X, y, DecisionTree, filename,
             # Train on inner training set
             clf = DecisionTree(X_tr, y_tr, X_te)
             nodes_unpruned = clf.fit(max_depth=max_depth, threshold=threshold)
+            avg_depths_before.append(compute_average_depth(nodes_unpruned))
 
             # Predict on the outer test set with the unpruned tree (before pruning)
             y_pred_unpruned = clf.predict(nodes_unpruned)
 
             # Prune using inner validation set (reduced-error pruning)
             nodes_pruned = prune_tree(nodes_unpruned, DecisionTree, X_tr, y_tr, X_val, y_val)
+            avg_depths_after.append(compute_average_depth(nodes_pruned))
 
             # Plot pruned tree (include inner_run to make filenames unique)
             plot_decision_tree(
@@ -421,6 +429,8 @@ def cross_validate_pruned_tree(X, y, DecisionTree, filename,
         "f1_per_class": f_vec_after,
         "macro_precision": float(macro_p_after),
         "macro_recall": float(macro_r_after),
-        "macro_f1": float(macro_f_after)
+        "macro_f1": float(macro_f_after),
+        "average_depth_before": float(np.mean(avg_depths_before)),
+        "average_depth_after": float(np.mean(avg_depths_after))
     }
     return results
