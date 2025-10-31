@@ -116,9 +116,11 @@ def prune_tree(nodes_dict: dict, DecisionTree, X_train: np.ndarray, y_train: np.
 	# so predictions have the correct dtype
 	while True:
 		validator = DecisionTree(X_train, y_train, X_val)
-		# baseline accuracy with current pruned_nodes
+		# baseline accuracy with current pruned_nodes (static for this pass)
 		y_val_pred = validator.predict(pruned_nodes)
-		best_accuracy = float(np.mean(y_val_pred == y_val))
+		baseline_accuracy = float(np.mean(y_val_pred == y_val))
+		# track the best accuracy found during this pass (starts at baseline)
+		current_pass_best_acc = baseline_accuracy
 		best_candidate_tree = None
 
 		internal_nodes = get_internal_nodes(pruned_nodes)
@@ -157,8 +159,11 @@ def prune_tree(nodes_dict: dict, DecisionTree, X_train: np.ndarray, y_train: np.
 			y_val_pred_temp = validator_temp.predict(temp_tree)
 			acc_temp = float(np.mean(y_val_pred_temp == y_val))
 
-			if acc_temp > best_accuracy:
-				best_accuracy = acc_temp
+			# compare against the running max for this pass so we keep the
+			# single best candidate found in this iteration (while baseline
+			# remains the original accuracy at loop start)
+			if acc_temp >= current_pass_best_acc:
+				current_pass_best_acc = acc_temp
 				best_candidate_tree = temp_tree
 
 		if best_candidate_tree is not None:
