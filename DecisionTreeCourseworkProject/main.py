@@ -53,6 +53,7 @@ def main():
                   f"Recall: {res_before['recall_per_class'][i]:.4f}  F1: {res_before['f1_per_class'][i]:.4f}")
         print(f"Macro Precision: {res_before['macro_precision']:.4f}  "
               f"Macro Recall: {res_before['macro_recall']:.4f}  Macro F1: {res_before['macro_f1']:.4f}")
+        print(f"Average tree depth: {res_before['average_depth']:.2f}")
 
         # Save results
         np.save(f"result/confusion_matrix_on_{filename}_before.npy", res_before["confusion_matrix"])
@@ -92,6 +93,8 @@ def main():
                   f"Recall: {res_after['recall_per_class'][i]:.4f}  F1: {res_after['f1_per_class'][i]:.4f}")
         print(f"Macro Precision: {res_after['macro_precision']:.4f}  "
               f"Macro Recall: {res_after['macro_recall']:.4f}  Macro F1: {res_after['macro_f1']:.4f}")
+        print(f"Average tree depth before pruning: {res_after['average_depth_before']:.2f}")
+        print(f"Average tree depth after pruning: {res_after['average_depth_after']:.2f}")
         print()
 
         # Save results: save both paired confusion matrices for the pruning experiment
