@@ -1,0 +1,21 @@
+# Core ML libraries
+numpy>=1.21.0
+torch>=1.9.0
+scikit-learn>=1.0.0
+
+# Interpretability
+shap>=0.40.0
+
+# Symbolic regression
+gplearn>=0.4.0
+
+# Visualization
+matplotlib>=3.5.0
+seaborn>=0.11.0
+
+# Utilities
+pandas>=1.3.0
+tqdm>=4.62.0
+
+# Optional: For better symbolic regression (if you want to try PySR)
+# pysr>=0.11.0  # Uncomment if you want to use PySR instead of gplearn
