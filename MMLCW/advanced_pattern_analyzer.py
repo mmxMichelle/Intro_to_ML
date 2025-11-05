@@ -454,8 +454,10 @@ print(f"ANY important feature > 0.5: {acc_any:.4f}")
 print("\n" + "="*70)
 print("ANALYSIS SUMMARY")
 print("="*70)
+# Safely handle case where `xor_test_acc` may not have been set
+xor_test_acc_safe = xor_test_acc if xor_features else 0.0
 print(f"Neural Network:              {nn_test_acc:.4f}")
-print(f"Best XOR pattern:            {xor_test_acc:.4f if xor_features else 0:.4f}")
+print(f"Best XOR pattern:            {xor_test_acc_safe:.4f}")
 print(f"Best counting rule:          {count_acc:.4f}")
 print(f"Best weighted voting:        {vote_acc:.4f}")
 print(f"Best distilled tree:         {actual_test:.4f}")
