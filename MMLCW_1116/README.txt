@@ -5,6 +5,7 @@ pip install -r requirements.txt
 、、、
 
 To run the full pipeline, under the root directory, run
+(Note: this is time-consuming and one can reproduce the results by following later instructions starting from line 26)
 
 、、、
 python data_exploration.py
@@ -26,9 +27,11 @@ For simpler data illustration, one can simply check the data_exploration_noteboo
 exploration plot for 10 dimensional data cell by cell.
 For simpler MLP results reproduction, one can run the following command under the root directory, which would use the
 best MLP model for each dimension to predict kryptonite data labels.
-However, due to time limit, we are unable to save SVM RBF best models for reproduction, but running the svmrbf.py should
-give similar results to those provided in the essay.
 
 、、、
 python nn_reproduce.py
 、、、
+
+However, due to time limit, we are unable to save SVM RBF best models for reproduction, but running the svmrbf.py should
+give similar results to those provided in the essay.
+The overall model performance with respect to each dimension can be visualized by running accuracy_vs_dim.ipynb.
