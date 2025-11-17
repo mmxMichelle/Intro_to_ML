@@ -1,0 +1,5 @@
+===== 10-Fold Summary for 16D Dataset =====
+Average Best C : 100.00
+Accuracy : 0.5144 ¡À 0.0081
+F1-score : 0.5180 ¡À 0.0081
+AUC      : 0.5144 ¡À 0.0082

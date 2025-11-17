@@ -1,0 +1,5 @@
+===== 10-Fold Summary for 20D Dataset =====
+Average Best C : 100.00
+Accuracy : 0.4977 ¡À 0.0092
+F1-score : 0.4923 ¡À 0.0119
+AUC      : 0.4977 ¡À 0.0092

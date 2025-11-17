@@ -1,0 +1,5 @@
+===== 10-Fold Summary for 14D Dataset =====
+Average Best C : 100.00
+Accuracy : 0.5356 ¡À 0.0073
+F1-score : 0.5330 ¡À 0.0101
+AUC      : 0.5356 ¡À 0.0074

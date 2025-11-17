@@ -1,0 +1,5 @@
+===== 10-Fold Summary for 18D Dataset =====
+Average Best C : 100.00
+Accuracy : 0.5028 ¡À 0.0068
+F1-score : 0.5023 ¡À 0.0090
+AUC      : 0.5028 ¡À 0.0068

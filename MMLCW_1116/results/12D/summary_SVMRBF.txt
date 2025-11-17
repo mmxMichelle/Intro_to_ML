@@ -1,0 +1,5 @@
+===== 10-Fold Summary for 12D Dataset =====
+Average Best C : 100.00
+Accuracy : 0.5782 ¡À 0.0076
+F1-score : 0.5832 ¡À 0.0082
+AUC      : 0.5782 ¡À 0.0076
