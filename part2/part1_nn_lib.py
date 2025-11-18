@@ -544,7 +544,7 @@ def example_main():
     """
     Example usage of the neural network library.
     """
-    # Load iris dataset
+    # Settings
     input_dim = 4
     neurons = [16, 3]
     activations = ["relu", "identity"]
