@@ -576,7 +576,7 @@ def example_main():
     best_params = perform_hyperparameter_search(x_train, y_train)['best_params']
     hidden_layers = best_params['hidden_layers']
     lr = best_params['learning_rate']
-    
+
     # Create and train best hyperparams regressor
     regressor = Regressor(
         x_train,
@@ -587,10 +587,12 @@ def example_main():
         dropout_rate=0.3,
         patience=30
     )
-    
+
     regressor.fit(x_train, y_train)
     
     # Evaluate on test set
+    # (optional: load best model)
+    # regressor = load_regressor()
     print("\nTest Set Performance:")
     regressor.score(x_test, y_test)
     

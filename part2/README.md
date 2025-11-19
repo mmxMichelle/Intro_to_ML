@@ -1,297 +1,163 @@
-# Part 1: Neural Network Mini-Library
+# README
 
-## Overview
+# Neural Network Coursework Project
 
-This is a high-quality implementation of a neural network mini-library from scratch using only NumPy. The library provides all necessary components for building, training, and evaluating multi-layer neural networks.
+This repository contains the full implementation for a two-part
+neural-network coursework assignment:
 
-## Features
+1.  **Part 1 --- From-scratch NumPy Neural Network Library**\
+    Includes a custom multilayer network, activation functions, loss
+    layers, gradient-descent training loop, preprocessing tools, and
+    example usage on the *Iris* dataset.
 
-### ✅ Complete Implementation
-- **LinearLayer**: Fully connected layer with Xavier initialization
-- **Activation Functions**: ReLU and Sigmoid (with identity support)
-- **MultiLayerNetwork**: Flexible multi-layer architecture
-- **Trainer**: Mini-batch gradient descent with shuffling support
-- **Preprocessor**: Min-max scaling to [0, 1] range
-- **Loss Functions**: MSE and Cross-Entropy
+2.  **Part 2 --- California Housing Price Regression (PyTorch)**\
+    A full machine-learning pipeline including preprocessing, training,
+    early stopping, hyperparameter search, evaluation, saving/loading a
+    trained model, and data-exploration utilities.
 
-### ✅ Key Strengths
-1. **Vectorized Operations**: No Python loops in forward/backward passes for maximum efficiency
-2. **Numerical Stability**: Handles edge cases (sigmoid overflow, log(0), constant features)
-3. **Gradient Checking**: Thoroughly tested against numerical gradients
-4. **Clean Architecture**: Modular design following best practices
-5. **Comprehensive Testing**: Full test suite with integration tests
+Both parts run entirely from the project root directory.
 
-## Components
+------------------------------------------------------------------------
 
-### 1. LinearLayer
-```python
-layer = LinearLayer(n_in=10, n_out=20)
-output = layer.forward(input)
-grad_input = layer.backward(grad_output)
-layer.update_params(learning_rate=0.01)
+## Project Structure
+
+    project_root/
+    │
+    ├── part1_nn_lib.py
+    ├── part2_house_value_regression.py
+    ├── part2_model.pickle        # Saved model (generated after training)
+    ├── data_exploration.py
+    ├── requirements.txt
+    │
+    ├── iris.dat                  # Dataset for Part 1
+    └── src/
+         ├── housing.csv          # California housing dataset
+         └── median_house_value_distribution.png
+
+------------------------------------------------------------------------
+
+# 1. Installation
+
+You can set up the environment with a single command:
+
+``` bash
+pip install -r requirements.txt
 ```
 
-**Features:**
-- Xavier weight initialization for better convergence
-- Efficient matrix operations
-- Caches intermediate values for backward pass
-- Gradient descent parameter updates
+This installs all dependencies, including:
 
-### 2. Activation Layers
+-   NumPy, Pandas, SciPy\
+-   Scikit-learn\
+-   PyTorch\
+-   Matplotlib
 
-**SigmoidLayer:**
-```python
-sigmoid = SigmoidLayer()
-output = sigmoid.forward(input)  # Range: [0, 1]
-grad = sigmoid.backward(grad_output)
+Once the environment is ready, you can run each assignment part
+independently.
+
+------------------------------------------------------------------------
+
+# 2. Running Part 1 --- NumPy Neural Network (Iris Dataset)
+
+The Part 1 implementation is fully self-contained inside
+**`part1_nn_lib.py`**, including an `example_main()` function that:
+
+-   Loads and shuffles the *Iris* dataset
+-   Preprocesses inputs using a min--max normalizer
+-   Builds a multilayer network
+-   Trains it using mean-squared error
+-   Prints the validation loss
+
+### ▶ Run Part 1
+
+Simply run:
+
+``` bash
+python part1_nn_lib.py
 ```
 
-**ReluLayer:**
-```python
-relu = ReluLayer()
-output = relu.forward(input)  # max(0, x)
-grad = relu.backward(grad_output)
+The script will automatically:
+
+-   Read `iris.dat` from the project root
+-   Train the neural network
+-   Display the validation loss at the end
+
+
+------------------------------------------------------------------------
+
+# 3. Running Part 2 --- Housing Price Regression (PyTorch)
+
+Part 2 provides a full deep-learning pipeline using the California
+housing dataset located in `src/housing.csv`.
+
+Running the script performs:
+
+1.  Loading and splitting the data
+2.  Hyperparameter search (hidden layers + learning rate)
+3.  Training the best model with early stopping
+4.  Evaluating on a test set (RMSE, MAE, R²)
+5.  Saving the trained model into `part2_model.pickle`
+
+### ▶ Run Part 2
+
+Use:
+
+``` bash
+python part2_house_value_regression.py
 ```
 
-### 3. MultiLayerNetwork
-```python
-network = MultiLayerNetwork(
-    input_dim=4,
-    neurons=[16, 8, 2],
-    activations=["relu", "sigmoid", "identity"]
-)
+The script automatically:
 
-output = network.forward(input)
-grad_input = network.backward(grad_output)
-network.update_params(learning_rate=0.01)
+-   Reads `src/housing.csv`
+-   Performs 5-fold cross-validated hyperparameter tuning
+-   Trains the best model
+-   Prints performance metrics
+-   Saves the final model into `part2_model.pickle`
+
+Because hyperparameter search can take time, you'll see progress printed
+clearly as the training proceeds.
+
+------------------------------------------------------------------------
+
+# 4. Loading the Saved Regressor (Part 2)
+
+After training completes, you can load the saved model in any Python
+session:
+
+``` python
+from part2_house_value_regression import load_regressor
+
+model = load_regressor()
 ```
 
-**Architecture:**
-- Stacks linear layers with activation functions
-- Supports arbitrary depth
-- Flexible activation choices per layer
+You can then make predictions:
 
-### 4. Trainer
-```python
-trainer = Trainer(
-    network=network,
-    batch_size=32,
-    nb_epoch=100,
-    learning_rate=0.01,
-    loss_fun="mse",  # or "cross_entropy"
-    shuffle_flag=True
-)
+``` python
+import pandas as pd
 
-trainer.train(X_train, y_train)
-val_loss = trainer.eval_loss(X_val, y_val)
+sample = pd.DataFrame({...})  # your input features
+predictions = model.predict(sample)
+print(predictions)
 ```
 
-**Features:**
-- Mini-batch gradient descent
-- Optional data shuffling per epoch
-- Support for MSE and cross-entropy losses
-- Evaluation on validation data
+Everything needed for preprocessing (normalization, binarizers, stored
+min/max values) is already embedded inside the saved model.
 
-### 5. Preprocessor
-```python
-preprocessor = Preprocessor(data)
-normalized = preprocessor.apply(data)  # Scale to [0, 1]
-original = preprocessor.revert(normalized)  # Recover original scale
+------------------------------------------------------------------------
+
+# 5. Running Data Exploration Script
+
+To generate the histogram `median_house_value_distribution.png`, run:
+
+``` bash
+python data_exploration.py
 ```
 
-**Features:**
-- Min-max scaling to [0, 1] range
-- Handles constant features (zero variance)
-- Reversible transformation
-- Preserves data relationships
+This will:
 
-## Usage Example
+-   Load `src/housing.csv`
+-   Plot the distribution of `median_house_value`
+-   Save the image directly into the `src/` folder
 
-```python
-import numpy as np
-from part1_nn_lib import (
-    MultiLayerNetwork, Trainer, Preprocessor
-)
 
-# Load data
-X = np.loadtxt("data.csv", delimiter=",")
-y = np.loadtxt("labels.csv", delimiter=",")
+------------------------------------------------------------------------
 
-# Preprocess
-prep_X = Preprocessor(X)
-X_normalized = prep_X.apply(X)
-
-# Split data
-split = int(0.8 * len(X))
-X_train, X_val = X_normalized[:split], X_normalized[split:]
-y_train, y_val = y[:split], y[split:]
-
-# Create network
-network = MultiLayerNetwork(
-    input_dim=X.shape[1],
-    neurons=[64, 32, 10],
-    activations=["relu", "relu", "sigmoid"]
-)
-
-# Train
-trainer = Trainer(
-    network=network,
-    batch_size=32,
-    nb_epoch=100,
-    learning_rate=0.01,
-    loss_fun="mse",
-    shuffle_flag=True
-)
-
-trainer.train(X_train, y_train)
-
-# Evaluate
-val_loss = trainer.eval_loss(X_val, y_val)
-print(f"Validation Loss: {val_loss:.4f}")
-
-# Make predictions
-predictions = network.forward(X_val)
-```
-
-## Implementation Details
-
-### Backpropagation
-
-The implementation uses efficient backpropagation:
-
-**LinearLayer:**
-- Forward: `output = X @ W + b`
-- Backward:
-  - `grad_W = X^T @ grad_output`
-  - `grad_b = sum(grad_output, axis=0)`
-  - `grad_input = grad_output @ W^T`
-
-**SigmoidLayer:**
-- Forward: `σ(x) = 1 / (1 + e^(-x))`
-- Backward: `grad_input = grad_output * σ(x) * (1 - σ(x))`
-
-**ReluLayer:**
-- Forward: `max(0, x)`
-- Backward: `grad_input = grad_output * (x > 0)`
-
-### Numerical Stability
-
-1. **Sigmoid**: Uses different formulas for positive/negative values to avoid overflow
-2. **Cross-Entropy**: Clips predictions to avoid log(0)
-3. **Preprocessor**: Handles constant features by setting range to 1
-
-### Testing
-
-Run the comprehensive test suite:
-```bash
-python test_part1.py
-```
-
-Tests include:
-- ✓ Unit tests for each component
-- ✓ Numerical gradient checking
-- ✓ Shape validation
-- ✓ Integration test with full pipeline
-- ✓ Edge case handling
-
-## Performance Characteristics
-
-- **Vectorization**: All operations use NumPy's optimized routines
-- **Memory Efficiency**: Minimal caching, only stores necessary intermediate values
-- **Scalability**: Handles arbitrary network sizes and batch sizes
-
-## Design Decisions
-
-### 1. Xavier Initialization
-Initializes weights with variance scaled by layer size, promoting stable gradients and faster convergence.
-
-### 2. Mini-batch Training
-Balances between:
-- Computational efficiency (batch processing)
-- Gradient noise (helps escape local minima)
-- Memory usage
-
-### 3. Layer Abstraction
-Abstract `Layer` class enables:
-- Easy extension with new layer types
-- Consistent interface
-- Clean composition in `MultiLayerNetwork`
-
-### 4. Identity Activation
-Implemented by simply not adding an activation layer, avoiding unnecessary computation.
-
-## Common Patterns
-
-### Classification Task
-```python
-network = MultiLayerNetwork(
-    input_dim=features,
-    neurons=[128, 64, num_classes],
-    activations=["relu", "relu", "sigmoid"]
-)
-
-trainer = Trainer(
-    network=network,
-    loss_fun="cross_entropy",
-    # ... other params
-)
-```
-
-### Regression Task
-```python
-network = MultiLayerNetwork(
-    input_dim=features,
-    neurons=[128, 64, 1],
-    activations=["relu", "relu", "identity"]
-)
-
-trainer = Trainer(
-    network=network,
-    loss_fun="mse",
-    # ... other params
-)
-```
-
-## Tips for Best Results
-
-1. **Data Preprocessing**: Always normalize inputs using Preprocessor
-2. **Learning Rate**: Start with 0.01 and adjust based on convergence
-3. **Network Depth**: 2-4 hidden layers work well for most tasks
-4. **Batch Size**: 16-64 is a good range for most datasets
-5. **Epochs**: Monitor validation loss to avoid overfitting
-6. **Activation Functions**: ReLU for hidden layers, sigmoid/identity for output
-
-## Troubleshooting
-
-**Loss is NaN:**
-- Check learning rate (try reducing by 10x)
-- Ensure data is normalized
-- Check for extreme values in data
-
-**Loss not decreasing:**
-- Increase learning rate
-- Try more epochs
-- Increase network capacity (more neurons)
-- Check that data has signal (not random)
-
-**Overfitting:**
-- Reduce network size
-- Use fewer epochs
-- Get more training data
-
-## Files
-
-- `part1_nn_lib.py`: Main implementation
-- `test_part1.py`: Comprehensive test suite
-- `README.md`: This file
-
-## Quality Assurance
-
-✅ **All public tests pass**
-✅ **Numerical gradient checking validates backpropagation**
-✅ **Edge cases handled (constant features, numerical stability)**
-✅ **No Python loops in critical paths**
-✅ **Clean, documented code following best practices**
-✅ **Integration test shows 91.3% loss reduction**
-
-This implementation is competition-ready and should score highly on LabTS tests.

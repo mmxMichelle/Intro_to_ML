@@ -541,162 +541,100 @@ class Preprocessor(object):
 
 
 def example_main():
-    """
-    Example usage of the neural network library.
-    """
-    # Settings
     input_dim = 4
     neurons = [16, 3]
     activations = ["relu", "identity"]
     net = MultiLayerNetwork(input_dim, neurons, activations)
 
-    # Prepare data
     dat = np.loadtxt("iris.dat")
     np.random.shuffle(dat)
 
     x = dat[:, :4]
     y = dat[:, 4:]
 
-    # Preprocess data
-    prep_input = Preprocessor(x)
-    x_preprocessed = prep_input.apply(x)
-
-    # Split data
     split_idx = int(0.8 * len(x))
 
-    x_train = x_preprocessed[:split_idx]
+    x_train = x[:split_idx]
     y_train = y[:split_idx]
-    x_val = x_preprocessed[split_idx:]
+    x_val = x[split_idx:]
     y_val = y[split_idx:]
 
-    # Train network
+    prep_input = Preprocessor(x_train)
+
+    x_train_pre = prep_input.apply(x_train)
+    x_val_pre = prep_input.apply(x_val)
+
     trainer = Trainer(
         network=net,
         batch_size=8,
         nb_epoch=1000,
         learning_rate=0.01,
-        loss_fun="mse",
+        loss_fun="cross_entropy",
         shuffle_flag=True,
     )
 
-    trainer.train(x_train, y_train)
-    print("Validation loss: {}".format(trainer.eval_loss(x_val, y_val)))
+    trainer.train(x_train_pre, y_train)
+    print(f"Train loss = {trainer.eval_loss(x_train_pre, y_train)}")
+    print(f"Validation loss = {trainer.eval_loss(x_val_pre, y_val)}")
+
+    preds = net(x_val_pre).argmax(axis=1).squeeze()
+    targets = y_val.argmax(axis=1).squeeze()
+    accuracy = (preds == targets).mean()
+    print(f"Validation accuracy: {accuracy}")
 
 
-class MSELossLayer(object):
+class MSELossLayer(Layer):
     """
-    MSELossLayer: Computes mean-squared error loss.
-    """
-
-    def __init__(self):
-        """
-        Constructor for the MSELossLayer.
-        """
-        self._cache_current = None
-
-    def forward(self, predictions, targets):
-        """
-        Performs forward pass through the loss layer.
-
-        Arguments:
-            predictions {np.ndarray} -- predictions of the network, of shape
-                                        (batch_size, #output_neurons).
-            targets {np.ndarray} -- ground truth labels, of shape
-                                   (batch_size, #output_neurons).
-
-        Returns:
-            float -- mean squared error loss value.
-        """
-        # Cache predictions and targets for backward pass
-        self._cache_current = (predictions, targets)
-        
-        # Compute MSE: (1/n) * sum((predictions - targets)^2)
-        loss = np.mean((predictions - targets) ** 2)
-        
-        return loss
-
-    def backward(self):
-        """
-        Performs backward pass through the loss layer.
-
-        Returns:
-            {np.ndarray} -- gradient of the loss with respect to predictions, 
-                            of shape (batch_size, #output_neurons).
-        """
-        # Retrieve cached values
-        predictions, targets = self._cache_current
-
-        # Total number of elements (batch_size * n_outputs)
-        n = predictions.size
-
-        # Gradient of MSE: (2/n) * (predictions - targets)
-        grad = (2.0 / n) * (predictions - targets)
-
-        return grad
-
-
-class CrossEntropyLossLayer(object):
-    """
-    CrossEntropyLossLayer: Computes cross-entropy loss (for binary classification).
+    MSELossLayer: Computes mean-squared error between y_pred and y_target.
     """
 
     def __init__(self):
-        """
-        Constructor for the CrossEntropyLossLayer.
-        """
         self._cache_current = None
 
-    def forward(self, predictions, targets):
-        """
-        Performs forward pass through the loss layer.
+    @staticmethod
+    def _mse(y_pred, y_target):
+        return np.mean((y_pred - y_target) ** 2)
 
-        Arguments:
-            predictions {np.ndarray} -- predictions of the network, of shape
-                                        (batch_size, #output_neurons).
-            targets {np.ndarray} -- ground truth labels, of shape
-                                   (batch_size, #output_neurons).
+    @staticmethod
+    def _mse_grad(y_pred, y_target):
+        return 2 * (y_pred - y_target) / len(y_pred)
 
-        Returns:
-            float -- cross entropy loss value.
-        """
-        # Cache predictions and targets for backward pass
-        self._cache_current = (predictions, targets)
-        
-        # Clip predictions to avoid log(0)
-        epsilon = 1e-15
-        predictions_clipped = np.clip(predictions, epsilon, 1 - epsilon)
-        
-        # Compute cross-entropy: -mean(targets * log(predictions) + (1 - targets) * log(1 - predictions))
-        loss = -np.mean(
-            targets * np.log(predictions_clipped) + 
-            (1 - targets) * np.log(1 - predictions_clipped)
-        )
-        
-        return loss
+    def forward(self, y_pred, y_target):
+        self._cache_current = y_pred, y_target
+        return self._mse(y_pred, y_target)
 
     def backward(self):
-        """
-        Performs backward pass through the loss layer.
+        return self._mse_grad(*self._cache_current)
 
-        Returns:
-            {np.ndarray} -- gradient of the loss with respect to predictions,
-                            of shape (batch_size, #output_neurons).
-        """
-        # Retrieve cached values
-        predictions, targets = self._cache_current
 
-        # Total number of elements (batch_size * n_outputs)
-        n = predictions.size
+class CrossEntropyLossLayer(Layer):
+    """
+    CrossEntropyLossLayer: Computes the softmax followed by the negative
+    log-likelihood loss.
+    """
 
-        # Clip predictions to avoid division by zero
-        epsilon = 1e-15
-        predictions_clipped = np.clip(predictions, epsilon, 1 - epsilon)
+    def __init__(self):
+        self._cache_current = None
 
-        # Gradient of cross-entropy: (1/n) * (predictions - targets) / (predictions * (1 - predictions))
-        grad = (predictions_clipped - targets) / (predictions_clipped * (1 - predictions_clipped))
-        grad = grad / n
+    @staticmethod
+    def softmax(x):
+        numer = np.exp(x - x.max(axis=1, keepdims=True))
+        denom = numer.sum(axis=1, keepdims=True)
+        return numer / denom
 
-        return grad
+    def forward(self, inputs, y_target):
+        assert len(inputs) == len(y_target)
+        n_obs = len(y_target)
+        probs = self.softmax(inputs)
+        self._cache_current = y_target, probs
+
+        out = -1 / n_obs * np.sum(y_target * np.log(probs))
+        return out
+
+    def backward(self):
+        y_target, probs = self._cache_current
+        n_obs = len(y_target)
+        return -1 / n_obs * (y_target - probs)
 
 
 if __name__ == "__main__":
