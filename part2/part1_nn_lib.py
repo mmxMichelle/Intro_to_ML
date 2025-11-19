@@ -38,95 +38,59 @@ class Layer:
     def update_params(self, *args, **kwargs):
         pass
 
-
-class LinearLayer(Layer):
+class MSELossLayer(Layer):
     """
-    LinearLayer: Performs affine transformation of input.
+    MSELossLayer: Computes mean-squared error between y_pred and y_target.
     """
 
-    def __init__(self, n_in, n_out):
-        """
-        Constructor for the LinearLayer.
-
-        Arguments:
-            n_in {int} -- number of input neurons
-            n_out {int} -- number of output neurons
-
-        """
-        # Initialize weights using Xavier initialization
-        self._W = xavier_init((n_in, n_out))
-        self._b = np.zeros((1, n_out))
-        
-        # Placeholders for gradients
-        self._grad_W_current = None
-        self._grad_b_current = None
-        
-        # Cache for backward pass
+    def __init__(self):
         self._cache_current = None
 
-    def forward(self, x):
-        """
-        Performs forward pass through the layer (i.e. returns Wx + b).
+    @staticmethod
+    def _mse(y_pred, y_target):
+        return np.mean((y_pred - y_target) ** 2)
 
-        Arguments:
-            x {np.ndarray} -- input array of shape (batch_size, n_in).
+    @staticmethod
+    def _mse_grad(y_pred, y_target):
+        return 2 * (y_pred - y_target) / len(y_pred)
 
-        Returns:
-            {np.ndarray} -- output array of shape (batch_size, n_out)
-        """
-        # Cache input for backward pass
-        self._cache_current = x
-        
-        # Compute affine transformation: XW + b
-        # Broadcasting handles adding bias to each sample in batch
-        output = np.dot(x, self._W) + self._b
-        
-        return output
+    def forward(self, y_pred, y_target):
+        self._cache_current = y_pred, y_target
+        return self._mse(y_pred, y_target)
 
-    def backward(self, grad_z):
-        """
-        Given `grad_z`, the gradient of some scalar (e.g. loss) with respect to
-        the output of this layer, performs back pass through the layer (i.e.
-        computes gradients of loss with respect to parameters of layer and inputs of layer).
+    def backward(self):
+        return self._mse_grad(*self._cache_current)
 
-        Arguments:
-            grad_z {np.ndarray} -- gradient of the loss with respect to the output of this layer.
-                                   Shape: (batch_size, n_out)
 
-        Returns:
-            {np.ndarray} -- gradient of the loss with respect to the input of this layer.
-                            Shape: (batch_size, n_in)
-        """
-        # Retrieve cached input
-        x = self._cache_current
-        
-        # Gradient with respect to weights: X^T @ grad_z
-        # Shape: (n_in, batch_size) @ (batch_size, n_out) = (n_in, n_out)
-        self._grad_W_current = np.dot(x.T, grad_z)
-        
-        # Gradient with respect to bias: sum over batch dimension
-        # Shape: (batch_size, n_out) -> (1, n_out)
-        self._grad_b_current = np.sum(grad_z, axis=0, keepdims=True)
-        
-        # Gradient with respect to input: grad_z @ W^T
-        # Shape: (batch_size, n_out) @ (n_out, n_in) = (batch_size, n_in)
-        grad_x = np.dot(grad_z, self._W.T)
-        
-        return grad_x
+class CrossEntropyLossLayer(Layer):
+    """
+    CrossEntropyLossLayer: Computes the softmax followed by the negative
+    log-likelihood loss.
+    """
 
-    def update_params(self, learning_rate):
-        """
-        Performs one step of gradient descent with given learning rate on the layer's parameters using currently computed gradients.
+    def __init__(self):
+        self._cache_current = None
 
-        Arguments:
-            learning_rate {float} -- learning rate of update step.
-        """
-        # Update weights: W = W - lr * grad_W
-        self._W -= learning_rate * self._grad_W_current
-        
-        # Update bias: b = b - lr * grad_b
-        self._b -= learning_rate * self._grad_b_current
+    @staticmethod
+    def softmax(x):
+        numer = np.exp(x - x.max(axis=1, keepdims=True))
+        denom = numer.sum(axis=1, keepdims=True)
+        return numer / denom
 
+    def forward(self, inputs, y_target):
+        assert len(inputs) == len(y_target)
+        n_obs = len(y_target)
+        probs = self.softmax(inputs)
+        self._cache_current = y_target, probs
+
+        out = -1 / n_obs * np.sum(y_target * np.log(probs))
+        return out
+
+    def backward(self):
+        y_target, probs = self._cache_current
+        n_obs = len(y_target)
+        return -1 / n_obs * (y_target - probs)
+ 
 
 class SigmoidLayer(Layer):
     """
@@ -242,6 +206,96 @@ class ReluLayer(Layer):
         grad_x = grad_z * relu_grad
         
         return grad_x
+
+class LinearLayer(Layer):
+    """
+    LinearLayer: Performs affine transformation of input.
+    """
+
+    def __init__(self, n_in, n_out):
+        """
+        Constructor for the LinearLayer.
+
+        Arguments:
+            n_in {int} -- number of input neurons
+            n_out {int} -- number of output neurons
+        
+        """
+        self.n_in = n_in
+        self.n_out = n_out
+        # Initialize weights using Xavier initialization
+        self._W = xavier_init((n_in, n_out))
+        self._b = np.zeros((1, n_out))
+        
+        # Placeholders for gradients
+        self._grad_W_current = None
+        self._grad_b_current = None
+        
+        # Cache for backward pass
+        self._cache_current = None
+
+    def forward(self, x):
+        """
+        Performs forward pass through the layer (i.e. returns Wx + b).
+
+        Arguments:
+            x {np.ndarray} -- input array of shape (batch_size, n_in).
+
+        Returns:
+            {np.ndarray} -- output array of shape (batch_size, n_out)
+        """
+        # Cache input for backward pass
+        self._cache_current = x
+        
+        # Compute affine transformation: XW + b
+        # Broadcasting handles adding bias to each sample in batch
+        output = np.dot(x, self._W) + self._b
+        
+        return output
+
+    def backward(self, grad_z):
+        """
+        Given `grad_z`, the gradient of some scalar (e.g. loss) with respect to
+        the output of this layer, performs back pass through the layer (i.e.
+        computes gradients of loss with respect to parameters of layer and inputs of layer).
+
+        Arguments:
+            grad_z {np.ndarray} -- gradient of the loss with respect to the output of this layer.
+                                   Shape: (batch_size, n_out)
+
+        Returns:
+            {np.ndarray} -- gradient of the loss with respect to the input of this layer.
+                            Shape: (batch_size, n_in)
+        """
+        # Retrieve cached input
+        x = self._cache_current
+        
+        # Gradient with respect to weights: X^T @ grad_z
+        # Shape: (n_in, batch_size) @ (batch_size, n_out) = (n_in, n_out)
+        self._grad_W_current = np.dot(x.T, grad_z)
+        
+        # Gradient with respect to bias: sum over batch dimension
+        # Shape: (batch_size, n_out) -> (1, n_out)
+        self._grad_b_current = np.sum(grad_z, axis=0, keepdims=True)
+        
+        # Gradient with respect to input: grad_z @ W^T
+        # Shape: (batch_size, n_out) @ (n_out, n_in) = (batch_size, n_in)
+        grad_x = np.dot(grad_z, self._W.T)
+        
+        return grad_x
+
+    def update_params(self, learning_rate):
+        """
+        Performs one step of gradient descent with given learning rate on the layer's parameters using currently computed gradients.
+
+        Arguments:
+            learning_rate {float} -- learning rate of update step.
+        """
+        # Update weights: W = W - lr * grad_W
+        self._W -= learning_rate * self._grad_W_current
+        
+        # Update bias: b = b - lr * grad_b
+        self._b -= learning_rate * self._grad_b_current
 
 
 class MultiLayerNetwork(object):
@@ -583,58 +637,7 @@ def example_main():
     print(f"Validation accuracy: {accuracy}")
 
 
-class MSELossLayer(Layer):
-    """
-    MSELossLayer: Computes mean-squared error between y_pred and y_target.
-    """
 
-    def __init__(self):
-        self._cache_current = None
-
-    @staticmethod
-    def _mse(y_pred, y_target):
-        return np.mean((y_pred - y_target) ** 2)
-
-    @staticmethod
-    def _mse_grad(y_pred, y_target):
-        return 2 * (y_pred - y_target) / len(y_pred)
-
-    def forward(self, y_pred, y_target):
-        self._cache_current = y_pred, y_target
-        return self._mse(y_pred, y_target)
-
-    def backward(self):
-        return self._mse_grad(*self._cache_current)
-
-
-class CrossEntropyLossLayer(Layer):
-    """
-    CrossEntropyLossLayer: Computes the softmax followed by the negative
-    log-likelihood loss.
-    """
-
-    def __init__(self):
-        self._cache_current = None
-
-    @staticmethod
-    def softmax(x):
-        numer = np.exp(x - x.max(axis=1, keepdims=True))
-        denom = numer.sum(axis=1, keepdims=True)
-        return numer / denom
-
-    def forward(self, inputs, y_target):
-        assert len(inputs) == len(y_target)
-        n_obs = len(y_target)
-        probs = self.softmax(inputs)
-        self._cache_current = y_target, probs
-
-        out = -1 / n_obs * np.sum(y_target * np.log(probs))
-        return out
-
-    def backward(self):
-        y_target, probs = self._cache_current
-        n_obs = len(y_target)
-        return -1 / n_obs * (y_target - probs)
 
 
 if __name__ == "__main__":
