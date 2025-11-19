@@ -625,13 +625,13 @@ class MSELossLayer(object):
         """
         # Retrieve cached values
         predictions, targets = self._cache_current
-        
-        # Get batch size
-        batch_size = predictions.shape[0]
-        
+
+        # Total number of elements (batch_size * n_outputs)
+        n = predictions.size
+
         # Gradient of MSE: (2/n) * (predictions - targets)
-        grad = (2.0 / batch_size) * (predictions - targets)
-        
+        grad = (2.0 / n) * (predictions - targets)
+
         return grad
 
 
@@ -684,18 +684,18 @@ class CrossEntropyLossLayer(object):
         """
         # Retrieve cached values
         predictions, targets = self._cache_current
-        
-        # Get batch size
-        batch_size = predictions.shape[0]
-        
+
+        # Total number of elements (batch_size * n_outputs)
+        n = predictions.size
+
         # Clip predictions to avoid division by zero
         epsilon = 1e-15
         predictions_clipped = np.clip(predictions, epsilon, 1 - epsilon)
-        
+
         # Gradient of cross-entropy: (1/n) * (predictions - targets) / (predictions * (1 - predictions))
         grad = (predictions_clipped - targets) / (predictions_clipped * (1 - predictions_clipped))
-        grad = grad / batch_size
-        
+        grad = grad / n
+
         return grad
 
 
